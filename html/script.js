@@ -20,10 +20,10 @@ let minRot = -90,
   cyl,
   driver,
   cylRotationInterval,
-  pinLastDamaged;
+  pinLastDamaged,
+  gameToken;
 
 $(function () {
-  //pop vars
   pin = $('#pin');
   cyl = $('#cylinder');
   driver = $('#driver');
@@ -72,24 +72,12 @@ $(function () {
       unpushCyl();
     }
   });
+});
 
-  //TOUCH HANDLERS
-  $('body').on('touchstart', function (e) {
-    // console.log('touchStart', e);
-    if (!e.touchList) {
-    } else if (e.touchList) {
-    }
-  });
-}); //docready
-
-//CYL INTERACTIVITY EVENTS
 function pushCyl() {
   var distFromSolve, cylRotationAllowance;
   clearInterval(cylRotationInterval);
   userPushingCyl = true;
-  //set an interval based on keyrepeat that will rotate the cyl forward, and if cyl is at or past maxCylRotation based on pick distance from solve, display "bounce" anim and do damage to pick. If pick is within sweet spot params, allow pick to rotate to maxRot and trigger solve functionality
-
-  //SO...to calculate max rotation, we need to create a linear scale from solveDeg+padding to maxDistFromSolve - if the user is more than X degrees away from solve zone, they are maximally distant and the cylinder cannot travel at all. Let's start with 45deg. So...we need to create a scale and do a linear conversion. If user is at or beyond max, return 0. If user is within padding zone, return 100. Cyl may travel that percentage of maxRot before hitting the damage zone.
 
   distFromSolve = Math.abs(pinRot - solveDeg) - solvePadding;
   distFromSolve = Util.clamp(distFromSolve, maxDistFromSolve, 0);
@@ -100,19 +88,17 @@ function pushCyl() {
     maxDistFromSolve,
     1,
     0.02
-  ); //oldval is distfromsolve, oldmin is....0? oldMax is maxDistFromSolve, newMin is 100 (we are at solve, so cyl may travel 100% of maxRot), newMax is 0 (we are at or beyond max dist from solve, so cyl may not travel at all - UPDATE - must give cyl just a teensy bit of travel so user isn't hammered);
+  );
   cylRotationAllowance = cylRotationAllowance * maxRot;
 
   cylRotationInterval = setInterval(function () {
     cylRot += cylRotSpeed;
     if (cylRot >= maxRot) {
       cylRot = maxRot;
-      // do happy solvey stuff
       clearInterval(cylRotationInterval);
       unlock();
     } else if (cylRot >= cylRotationAllowance) {
       cylRot = cylRotationAllowance;
-      // do sad pin-hurty stuff
       damagePin();
     }
 
@@ -127,7 +113,6 @@ function pushCyl() {
 
 function unpushCyl() {
   userPushingCyl = false;
-  //set an interval based on keyrepeat that will rotate the cyl backward, and if cyl is at or past origin, set to origin and stop.
   clearInterval(cylRotationInterval);
   cylRotationInterval = setInterval(function () {
     cylRot -= cylRotSpeed;
@@ -145,16 +130,12 @@ function unpushCyl() {
   }, keyRepeatRate);
 }
 
-//PIN AND SOLVE EVENTS
-
 function damagePin() {
   if (!pinLastDamaged || Date.now() - pinLastDamaged > pinDamageInterval) {
     var tl = new TimelineLite();
     pinHealth -= pinDamage;
-    // console.log('damagePin, pinHealth=', pinHealth);
     pinLastDamaged = Date.now();
 
-    //pin damage/lock jiggle animation
     tl.to(pin, pinDamageInterval / 4 / 1000, {
       rotationZ: pinRot - 2,
     });
@@ -172,7 +153,6 @@ function breakPin() {
   gamePaused = true;
   clearInterval(cylRotationInterval);
   numPins--;
-  $('span').text(numPins);
   pinTop = pin.find('.top');
   pinBott = pin.find('.bott');
   tl = new TimelineLite();
@@ -205,7 +185,6 @@ function breakPin() {
 }
 
 function reset() {
-  //solveDeg = ( Math.random() * 180 ) - 90;
   cylRot = 0;
   pinHealth = 100;
   pinRot = 0;
@@ -234,17 +213,14 @@ function reset() {
 
 function outOfPins() {
   gameOver = true;
-  // $('#lose').css('display', 'inline-block');
   finish(false);
 }
 
 function unlock() {
   gameOver = true;
-  // $('#win').css('display', 'inline-block');
   finish(true);
 }
 
-//UTIL
 Util = {};
 Util.clamp = function (val, max, min) {
   return Math.min(Math.max(val, min), max);
@@ -257,8 +233,8 @@ window.addEventListener('message', function (event) {
   let data = event.data;
 
   if (data.start) {
+    gameToken = data.token;
     $('#wrap').show();
-    $('#text').show();
     minRot = -90;
     maxRot = 90;
     solveDeg = Math.random() * 180 - 90;
@@ -282,7 +258,6 @@ window.addEventListener('message', function (event) {
     driver = $('#driver');
     cylRotationInterval = null;
     pinLastDamaged = null;
-    $('span').text(numPins);
 
     reset();
   }
@@ -290,9 +265,8 @@ window.addEventListener('message', function (event) {
 
 function finish(success) {
   $('#wrap').hide();
-  $('#text').hide();
   if (success) {
-    $.post('https://lockpick/succeed', JSON.stringify({}));
+    $.post('https://lockpick/succeed', JSON.stringify({ token: gameToken }));
   } else {
     $.post('https://lockpick/failed', JSON.stringify({}));
   }
@@ -301,9 +275,9 @@ function finish(success) {
 document.addEventListener('keyup', keyUpHandler);
 
 function keyUpHandler(e) {
-  if (e.code == 'Escape') {
+  if (e.code == 'Escape' && !gameOver) {
+    gameOver = true;
     $('#wrap').hide();
-    $('#text').hide();
     $.post('https://lockpick/close', JSON.stringify({}));
   }
 }
